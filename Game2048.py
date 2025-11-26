@@ -96,7 +96,50 @@ class Game2048:
 
     def get_max_tile(self):
         return int(self.board.max())
-    
+
+
+
+def tile_variance(board):
+    flat = np.array(board).flatten()
+    flat = flat[flat != 0]
+    return float(np.var(flat)) if len(flat) else 0.0
+
+def monotonicity(board):
+    score = 0
+    # rows left->right
+    for row in board:
+        for i in range(3):
+            if row[i] >= row[i+1]:
+                score += 1
+    # cols top->bottom
+    for col in zip(*board):
+        for i in range(3):
+            if col[i] >= col[i+1]:
+                score += 1
+    return float(score)
+
+def edge_heaviness(board):
+    total = sum(sum(row) for row in board)
+    edges = (
+        sum(board[0]) +
+        sum(board[3]) +
+        board[1][0] + board[1][3] +
+        board[2][0] + board[2][3]
+    )
+    return float(edges / (total + 1))
+
+def num_merges(board):
+    merges = 0
+    for row in board:
+        for i in range(3):
+            if row[i] != 0 and row[i] == row[i+1]:
+                merges += 1
+    for col in zip(*board):
+        for i in range(3):
+            if col[i] != 0 and col[i] == col[i+1]:
+                merges += 1
+    return float(merges)
+
 # --- Board feature extraction ---
 def extract_features(board):
     # returns fixed set of features the evolutionary computing program will receive
@@ -104,8 +147,13 @@ def extract_features(board):
     max_tile = board.max()
     sum_tiles = np.sum(board)
     smooth = 0
+    variance = tile_variance(board)
+    monotonic = monotonicity(board)
+    edge_weight = edge_heaviness(board)
+    max_corner = 0
+    potential_merges = num_merges(board)
 
-    # smoothness: penalty for abrupt differences between tiles (monotonicity heuristic)
+    # smoothness: penalty for abrupt differences between tiles 
     for i in range(4):
         for j in range(4):
             if board[i, j] != 0:
@@ -114,4 +162,11 @@ def extract_features(board):
                     if 0 <= ni < 4 and 0 <= nj < 4 and board[ni, nj] != 0:
                         smooth -= abs(np.log2(board[i,j]) - np.log2(board[ni,nj]))
 
-    return np.array([empty, max_tile, sum_tiles, smooth], dtype=float)
+    corners = [board[0][0], board[0][3], board[3][0], board[3][3]]
+    if max_tile in corners:
+        max_corner = 0.5 * max_tile    
+    else:
+        max_corner = 0.0
+
+
+    return np.array([empty, max_tile, sum_tiles, smooth, variance, monotonic, edge_weight, max_corner, potential_merges], dtype=float)

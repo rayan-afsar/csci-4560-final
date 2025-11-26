@@ -1,39 +1,38 @@
 import random
 import math
 import operator
+from scoop import futures
 import numpy as np
 from deap import base, creator, gp, tools, algorithms
 from Game2048 import Game2048, extract_features, UP, DOWN, LEFT, RIGHT
 
 # initialize primitive set (potential nodes for GP tree)
-pset = gp.PrimitiveSet("MAIN", 4)   # 4 input features
-pset.renameArguments(ARG0="empty", ARG1="max_tile", ARG2="sum_tiles", ARG3="smooth")
+pset = gp.PrimitiveSet("MAIN", 9)   # 6 input features
+pset.renameArguments(ARG0="empty", ARG1="max_tile", ARG2="sum_tiles", ARG3="smooth", ARG4="variance", ARG5="monotonic", ARG6="edge_weight", ARG7="max_corner", ARG8="potential_merges")
 
 # safe arithmetic (no overflow) primitives
 def safe_div(a, b):
     return a / b if abs(b) > 1e-9 else a
-
 def safe_log(a):
     return math.log(abs(a)+1)
-
 def safe_sqrt(a):
     return math.sqrt(abs(a))
 
 # comparison primitives
 def gt(a, b): 
     return 1 if a > b else 0
-
 def lt(a, b): 
     return 1 if a < b else 0
-
 def eq(a, b): 
     return 1 if a == b else 0
 
-# return max/min
+# return max/min/abs
 def max2(a, b): 
     return a if a > b else b
 def min2(a, b): 
     return a if a < b else b
+def abs1(a):
+    return abs(a)
 
 # boolean primitives
 def logical_and(a, b): 
@@ -58,6 +57,7 @@ pset.addPrimitive(eq, 2)
 
 pset.addPrimitive(max2, 2)
 pset.addPrimitive(min2, 2)
+pset.addPrimitive(abs1, 1)
 
 pset.addPrimitive(logical_and, 2)
 pset.addPrimitive(logical_or, 2)
@@ -69,13 +69,14 @@ pset.addTerminal(1, name="down")  # down
 pset.addTerminal(2, name="left")  # left
 pset.addTerminal(3, name="right")  # right
 
-pset.addEphemeralConstant("rand", lambda: random.uniform(-3, 3))
+pset.addEphemeralConstant("rand", random.random)
 
 # setting up GP w/ DEAP
 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
 creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMax)
 
 toolbox = base.Toolbox()
+toolbox.register("map", futures.map)
 toolbox.register("expr", gp.genHalfAndHalf, pset=pset, min_=1, max_=3)
 toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.expr)
 toolbox.register("population", tools.initRepeat, list, toolbox.individual)
@@ -132,7 +133,7 @@ toolbox.decorate("mutate", gp.staticLimit(key=len, max_value=40))
 
 # main loop
 def main():
-    pop = toolbox.population(n=99)
+    pop = toolbox.population(n=1000)
     hof = tools.HallOfFame(5)
 
     stats = tools.Statistics(lambda ind: ind.fitness.values)
@@ -141,8 +142,8 @@ def main():
 
     pop, log = algorithms.eaSimple(
         pop, toolbox, 
-        cxpb=0.5, mutpb=0.3, 
-        ngen=50, 
+        cxpb=0.7, mutpb=0.1, 
+        ngen=100, 
         stats=stats, 
         halloffame=hof,
         verbose=True
@@ -154,11 +155,11 @@ def main():
 
     # test best individual at end over 30 games
     results = []
-    for _ in range(30):
+    for _ in range(40):
         mx, sc, mv = run_game(expr, seed=random.randrange(1,1000))
         results.append((mx, sc, mv))
 
-    print("Results over 30 evals:")
+    print("Results over 40 evals:")
     for idx, (mx, sc, mv) in enumerate(results):
         print(f"Game {idx+1}: Max tile={mx}, Score={sc}, Moves={mv}")
 

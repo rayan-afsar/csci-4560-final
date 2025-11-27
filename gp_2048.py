@@ -69,7 +69,10 @@ pset.addTerminal(1, name="down")  # down
 pset.addTerminal(2, name="left")  # left
 pset.addTerminal(3, name="right")  # right
 
-pset.addEphemeralConstant("rand", random.random)
+# ephemeral constant to add random noise w/o making python freak out
+def rand_const():
+    return random.random()
+pset.addEphemeralConstant("rand", rand_const)
 
 # setting up GP w/ DEAP
 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
@@ -132,6 +135,7 @@ toolbox.decorate("mate", gp.staticLimit(key=len, max_value=40))
 toolbox.decorate("mutate", gp.staticLimit(key=len, max_value=40))
 
 # main loop
+# feel free to modify params here
 def main():
     pop = toolbox.population(n=1000)
     hof = tools.HallOfFame(5)
@@ -153,13 +157,13 @@ def main():
     print(hof[0])
     expr = toolbox.compile(expr=hof[0])
 
-    # test best individual at end over 30 games
+    # test best individual at end over 50 games
     results = []
-    for _ in range(40):
+    for _ in range(50):
         mx, sc, mv = run_game(expr, seed=random.randrange(1,1000))
         results.append((mx, sc, mv))
 
-    print("Results over 40 evals:")
+    print("Results over 50 evals:")
     for idx, (mx, sc, mv) in enumerate(results):
         print(f"Game {idx+1}: Max tile={mx}, Score={sc}, Moves={mv}")
 
@@ -172,3 +176,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

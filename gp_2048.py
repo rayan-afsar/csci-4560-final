@@ -3,6 +3,7 @@ import math
 import operator
 from scoop import futures
 import numpy as np
+import pandas as pd
 from deap import base, creator, gp, tools, algorithms
 from Game2048 import Game2048, extract_features, UP, DOWN, LEFT, RIGHT
 
@@ -33,6 +34,12 @@ def min2(a, b):
     return a if a < b else b
 def abs1(a):
     return abs(a)
+def ceil(a):
+    return float(math.ceil(a))
+def floor(a):
+    return float(math.floor(a))
+def hypot(a, b):
+    return float(math.hypot(a, b)) # hypotenuse of triangle w/ sides a & b
 
 # boolean primitives
 def logical_and(a, b): 
@@ -58,6 +65,9 @@ pset.addPrimitive(eq, 2)
 pset.addPrimitive(max2, 2)
 pset.addPrimitive(min2, 2)
 pset.addPrimitive(abs1, 1)
+pset.addPrimitive(ceil, 1)
+pset.addPrimitive(floor, 1)
+pset.addPrimitive(hypot, 2)
 
 pset.addPrimitive(logical_and, 2)
 pset.addPrimitive(logical_or, 2)
@@ -142,20 +152,24 @@ def main():
 
     stats = tools.Statistics(lambda ind: ind.fitness.values)
     stats.register("avg score", np.mean)
+    stats.register("std dev", np.std)
+    stats.register("min score", np.min)
     stats.register("max score", np.max)
 
     pop, log = algorithms.eaSimple(
         pop, toolbox, 
         cxpb=0.7, mutpb=0.1, 
-        ngen=100, 
+        ngen=200, 
         stats=stats, 
         halloffame=hof,
         verbose=True
     )
 
     print("\nBest Individual:")
-    print(hof[0])
-    expr = toolbox.compile(expr=hof[0])
+    best_ind = hof[0]
+    print(best_ind)
+    expr = toolbox.compile(expr=best_ind)
+    print("\n ")
 
     # test best individual at end over 50 games
     results = []
@@ -164,16 +178,26 @@ def main():
         results.append((mx, sc, mv))
 
     print("Results over 50 evals:")
-    for idx, (mx, sc, mv) in enumerate(results):
-        print(f"Game {idx+1}: Max tile={mx}, Score={sc}, Moves={mv}")
+    with open("_best_individual_eval.txt", "w") as f:
+        f.write("\nBest Individual:")
+        f.write(str(best_ind))
+        f.write("\n")
+        f.write("Results over 50 evals:\n")
 
-    avg_max = np.mean([r[0] for r in results])
-    avg_score = np.mean([r[1] for r in results])
-    avg_moves = np.mean([r[2] for r in results])
-    print(f"\nAverages: Max tile={avg_max:.1f}, Score={avg_score:.1f}, Moves={avg_moves:.1f}")
-    return pop, log, hof
+        for idx, (mx, sc, mv) in enumerate(results):
+            line = (f"Game {idx+1}: Max tile={mx}, Score={sc}, Moves={mv}" + "\n")
+            print(line, end="")
+            f.write(str(line))
+
+        avg_max = np.mean([r[0] for r in results])
+        avg_score = np.mean([r[1] for r in results])
+        avg_moves = np.mean([r[2] for r in results])
+        summary = (f"\nAverages: Max tile={avg_max:.1f}, Score={avg_score:.1f}, Moves={avg_moves:.1f}")
+        print(summary)
+        f.write(str(summary))
 
 
 if __name__ == "__main__":
     main()
+
 

@@ -1,6 +1,5 @@
 import random
 import math
-import operator
 from scoop import futures
 import numpy as np
 import pandas as pd
@@ -8,12 +7,19 @@ from deap import base, creator, gp, tools, algorithms
 from Game2048 import Game2048, extract_features, UP, DOWN, LEFT, RIGHT
 
 # initialize primitive set (potential nodes for GP tree)
-pset = gp.PrimitiveSet("MAIN", 9)   # 6 input features
+pset = gp.PrimitiveSet("MAIN", 9)   # 9 input features
 pset.renameArguments(ARG0="empty", ARG1="max_tile", ARG2="sum_tiles", ARG3="smooth", ARG4="variance", ARG5="monotonic", ARG6="edge_weight", ARG7="max_corner", ARG8="potential_merges")
+
+def add(a, b):
+    return float(a + b)
+def sub(a, b):
+    return float(a - b)
+def mul(a, b):
+    return float(a * b)
 
 # safe arithmetic (no overflow) primitives
 def safe_div(a, b):
-    return a / b if abs(b) > 1e-9 else a
+    return float(a / b) if abs(b) > 1e-9 else a
 def safe_log(a):
     return math.log(abs(a)+1)
 def safe_sqrt(a):
@@ -33,7 +39,7 @@ def max2(a, b):
 def min2(a, b): 
     return a if a < b else b
 def abs1(a):
-    return abs(a)
+    return float(abs(a))
 def ceil(a):
     return float(math.ceil(a))
 def floor(a):
@@ -49,10 +55,9 @@ def logical_or(a, b):
 def logical_not(a): 
     return 1 if not a else 0
 
-
-pset.addPrimitive(operator.add, 2)
-pset.addPrimitive(operator.sub, 2)
-pset.addPrimitive(operator.mul, 2)
+pset.addPrimitive(add, 2)
+pset.addPrimitive(sub, 2)
+pset.addPrimitive(mul, 2)
 
 pset.addPrimitive(safe_div, 2)
 pset.addPrimitive(safe_log, 1)
@@ -82,6 +87,7 @@ pset.addTerminal(3, name="right")  # right
 # ephemeral constant to add random noise w/o making python freak out
 def rand_const():
     return random.random()
+
 pset.addEphemeralConstant("rand", rand_const)
 
 # setting up GP w/ DEAP
@@ -102,7 +108,7 @@ def run_game(expr, seed=None, max_moves=3000):
     while game.can_move() and moves < max_moves:
         scores = []
         for move in [UP, DOWN, LEFT, RIGHT]:
-            g2 = Game2048()
+            g2 = Game2048(rng=rng)
             g2.board = game.board.copy()
             g2.score = game.score
             if not g2.move(move):
@@ -110,28 +116,36 @@ def run_game(expr, seed=None, max_moves=3000):
                 continue
             feats = extract_features(g2.board)
             empty_bonus = feats[0] * 3    # extra weight for empty tiles
-            monotonicity = feats[3] * 1.5
+            monotonicity = feats[3] * 1.5   # smoothness
             val = expr(*feats) + empty_bonus + monotonicity
             scores.append(val)
         
-        best_move = np.argmax(scores)
+        best_idx = int(np.argmax(scores))
+        best_move = [UP, DOWN, LEFT, RIGHT][best_idx]
         game.move(best_move)
         moves += 1
 
     return game.get_max_tile(), game.score, moves
 
 def evaluate_individual(individual):
-    expr = toolbox.compile(expr=individual)
-    max_tiles = []
-    moves_list = []
-    for i in range(3):
-        mx, sc, mv = run_game(expr, seed=random.randrange(1, 100))
-        max_tiles.append(mx)
-        moves_list.append(mv)
+    try:
+        expr = toolbox.compile(expr=individual)
+        max_tiles = []
+        moves_list = []
+        scores = []
+        for i in range(3):
+            mx, sc, mv = run_game(expr, seed=random.randrange(1, 100))
+            max_tiles.append(mx)
+            moves_list.append(mv)
+            scores.append(sc)
 
-    avg_max = np.mean(max_tiles)
-    bonus = 1000 if any(t >= 2048 for t in max_tiles) else 0
-    return (avg_max + bonus,)
+        avg_score = np.mean(scores)
+        avg_max = np.mean(max_tiles)
+        bonus = 1000 if any(t >= 2048 for t in max_tiles) else 0
+        return (avg_score + avg_max + bonus,)
+    except Exception:
+        print(Exception)
+        return (-9999999,)
 
 # register GP functions
 toolbox.register("compile", gp.compile, pset=pset)
@@ -143,12 +157,11 @@ toolbox.register("mutate", gp.mutUniform, expr=toolbox.expr_mut, pset=pset)
 
 toolbox.decorate("mate", gp.staticLimit(key=len, max_value=40))
 toolbox.decorate("mutate", gp.staticLimit(key=len, max_value=40))
-
+    
 # main loop
-# feel free to modify params here
 def main():
     pop = toolbox.population(n=1000)
-    hof = tools.HallOfFame(5)
+    hof = tools.HallOfFame(10)
 
     stats = tools.Statistics(lambda ind: ind.fitness.values)
     stats.register("avg score", np.mean)
@@ -164,6 +177,16 @@ def main():
         halloffame=hof,
         verbose=True
     )
+
+    log_df = pd.DataFrame(log)
+    log_name = "_gp_log.csv"
+    log_df.to_csv(log_name, index=False)
+    print("Saved evolution log to " + log_name + "\n")
+
+
+    with open("_gp_log.txt", "w") as f:
+        for record in log:
+            f.write(str(record) + "\n")
 
     print("\nBest Individual:")
     best_ind = hof[0]
@@ -196,8 +219,8 @@ def main():
         print(summary)
         f.write(str(summary))
 
+    return pop, log, hof
+
 
 if __name__ == "__main__":
     main()
-
-

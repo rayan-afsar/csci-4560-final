@@ -116,8 +116,8 @@ def run_game(expr, seed=None, max_moves=3000):
                 continue
             feats = extract_features(g2.board)
             empty_bonus = feats[0] * 3    # extra weight for empty tiles
-            monotonicity = feats[3] * 1.5   # smoothness
-            val = expr(*feats) + empty_bonus + monotonicity
+            smoothness = feats[3] * 1.5   # smoothness
+            val = expr(*feats) + empty_bonus + smoothness
             scores.append(val)
         
         best_idx = int(np.argmax(scores))
@@ -224,3 +224,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
